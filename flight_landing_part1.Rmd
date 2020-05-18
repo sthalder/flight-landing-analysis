@@ -1,0 +1,225 @@
+---
+title: "Project1_SH"
+author: "Soumya Halder"
+date: "1/21/2020"
+output:
+  word_document: default
+  html_document: default
+---
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(MASS)
+```
+
+
+1) Importing data: The 2 datasets are imported using *readxl* package.
+```{r }
+# Importing datasets
+faa1 <- read_excel("FAA1-1.xls")
+faa2 <- read_excel("FAA2-1.xls")
+```
+
+2) Structure of datasets:
+* FAA1: It contains 800 observations with 8 variables
+* FAA2: It contains 150 observations with 7 variables
+Except aircraft, all other variables are numeric. The FAA2 doesn't have the duration variable present in FAA1, which has been added here as an empty variable.
+```{r}
+# Structure of both datasets
+str(faa1)
+str(faa2)
+```
+
+3) The 2 datasets are merged with *rbind*. We observe 100 duplicate observations present in the final dataset, which are removed using *distinct*.
+```{r}
+faa2$duration <- ""
+faa_merged <- rbind(faa1, faa2)
+faa_merged <- distinct(faa_merged, aircraft, no_pasg, speed_ground, .keep_all = T)
+```
+
+4) The combined dataset contains 850 observations with 8 variables(duration variables is made numeric). The summary statistics for each variable is as follows:
+```{r}
+str(faa_merged)
+faa_merged$duration <- as.numeric(faa_merged$duration)
+summary(faa_merged)
+```
+
+5) Below are some of the key findings:
+* There were 100 duplicate observations after merging both datasets
+* The minimum height is a negative value which might a data issue
+* There are flights which have durations less than 40 minutes
+* The data for distance may not be normally distributed given the distance between its median and mean are quite far from each other
+
+6) Data Cleaning: Based on data dictionary, the abnormal values are eliminated. The NAs are not removed from *speed_air*, since they are present in large numbers.
+```{r}
+faa_clean <- faa_merged %>% 
+                  filter((duration > 40 & between(speed_ground, 30, 140) & 
+                          height >= 6 & distance < 6000) %>% 
+                  replace_na(TRUE))
+```
+
+7) After cleaning the data, we have 831 observations with 8 variables and no abnormal values as per data dictionary.
+```{r}
+str(faa_clean)
+summary(faa_clean)
+```
+
+8) The histograms for each variable is plotted to check the distribution. Almost all variables seem to be normally distributed.
+```{r}
+par(mfrow = c(2,4))
+hist(faa_clean$duration)
+hist(faa_clean$no_pasg)
+hist(faa_clean$speed_ground)
+hist(faa_clean$speed_air)
+hist(faa_clean$height)
+hist(faa_clean$pitch)
+hist(faa_clean$distance)
+```
+
+9) After merging both the datasets, below are some of the key findings:
+* Most of the variables seem to follow a normal distribution
+* The data available for both the aircrafts are significant
+* Proportion of abnormal values was not very high(~2%)
+* Since *speed_air* contains 642 NA values, they were not removed or imputed since it can affect the health of the data
+
+10) We perform pairwise correlation of each variable with landing distance and create table 1. It contains correlation value sorted in descending order of absolute value.
+```{r}
+faa_cor <- cor(faa_clean[2:8], use = "pairwise.complete.obs")
+table1 <- data.frame(variables = c("duration", "no_pasg", "speed_ground", "spedd_air", "height", "pitch", "distance"), correlation = faa_cor[,7])
+table1 <- table1 %>% 
+              mutate(Direction = ifelse(correlation > 0, "Positive", "Negative"),
+                     correlation = ifelse(correlation > 0, correlation, correlation*(-1)))
+table1 <- table1 %>% 
+          arrange(desc(abs(correlation)))
+```
+
+11) The scatter plots seem consistent with the correlation table. Except *speed_air* and *speed_ground*, there's not much correlation in the data.
+```{r}
+par(mfrow = c(2,3))
+plot(faa_clean$duration, faa_clean$distance, col="blue")
+plot(faa_clean$no_pasg, faa_clean$distance, col="blue")
+plot(faa_clean$speed_ground, faa_clean$distance, col="blue")
+plot(faa_clean$speed_air, faa_clean$distance, col="blue")
+plot(faa_clean$height, faa_clean$distance, col="blue")
+plot(faa_clean$pitch, faa_clean$distance, col="blue")
+```
+
+12) A new column *airplane_make* based on *aircraft* is added to the data, which will be used in further steps for model building.
+```{r}
+faa_clean <- faa_clean %>% 
+                mutate(airplane_make = ifelse(aircraft %in% "boeing", 1, 0))
+str(faa_clean)
+faa_clean$airplane_make <- as.factor(faa_clean$airplane_make)
+```
+
+13) We build multiple linear models with *distance* as the response variable and every other variable as predictor each time. Table 2 is made in ascending order of the p-value obtained. *speed_ground*, *speed_air* and *airplane_make* seems to be the most important factor in predicting landing distances.
+```{r}
+model1 <- lm(distance ~ duration, faa_clean)
+model2 <- lm(distance ~ no_pasg, faa_clean)
+model3 <- lm(distance ~ speed_ground, faa_clean)
+model4 <- lm(distance ~ speed_air, faa_clean)
+model5 <- lm(distance ~ height, faa_clean)
+model6 <- lm(distance ~ pitch, faa_clean)
+model7 <- lm(distance ~ airplane_make, faa_clean)
+summary(model2)$coefficients
+table2 <- data.frame(variables = c("duration", "no_pasg", "speed_ground", "spedd_air", "height", "pitch", "airplane_make"),coefficients = c(summary(model1)$coefficients[2,1], summary(model2)$coefficients[2,1], summary(model3)$coefficients[2,1], summary(model4)$coefficients[2,1], summary(model5)$coefficients[2,1], summary(model6)$coefficients[2,1], summary(model7)$coefficients[2,1]), 
+                     p_value = c(summary(model1)$coefficients[2,4], summary(model2)$coefficients[2,4], summary(model3)$coefficients[2,4], summary(model4)$coefficients[2,4], summary(model5)$coefficients[2,4], summary(model6)$coefficients[2,4], summary(model7)$coefficients[2,4]))
+
+table2 <- table2 %>% 
+          arrange(abs(p_value))
+
+```
+
+14) Every predictor variable is standardized by X’= {X-mean(X)}/sd(X). The models obtained in previous step are rerun and table 3 is created based on p-value. A similar level of importance in predictors can be observed as seen in table 2.
+```{r}
+faa_std <- faa_clean %>% 
+            transmute(distance = distance * 1,
+                      duration = (duration - mean(duration, na.rm = T))/sd(duration, na.rm = T),
+                      no_pasg = (no_pasg - mean(no_pasg, na.rm = T))/sd(no_pasg, na.rm = T),
+                      speed_ground = (speed_ground - mean(speed_ground, na.rm = T))/sd(speed_ground, na.rm = T),
+                      speed_air = (speed_air - mean(speed_air, na.rm = T))/sd(speed_air, na.rm = T),
+                      height = (height - mean(height, na.rm = T))/sd(height, na.rm = T),
+                      pitch = (pitch - mean(pitch, na.rm = T))/sd(pitch, na.rm = T),
+                      airplane_make = airplane_make)
+str(faa_std)
+
+model1.std <- lm(distance ~ duration, faa_std)
+model2.std <- lm(distance ~ no_pasg, faa_std)
+model3.std <- lm(distance ~ speed_ground, faa_std)
+model4.std <- lm(distance ~ speed_air, faa_std)
+model5.std <- lm(distance ~ height, faa_std)
+model6.std <- lm(distance ~ pitch, faa_std)
+model7.std <- lm(distance ~ airplane_make, faa_std)
+
+table3 <- data.frame(variables = c("duration", "no_pasg", "speed_ground", "spedd_air", "height", "pitch", "airplane_make"),coefficients = c(summary(model1.std)$coefficients[2,1], summary(model2.std)$coefficients[2,1], summary(model3.std)$coefficients[2,1], summary(model4.std)$coefficients[2,1], summary(model5.std)$coefficients[2,1], summary(model6.std)$coefficients[2,1], summary(model7.std)$coefficients[2,1]), 
+                     p_value = c(summary(model1.std)$coefficients[2,4], summary(model2.std)$coefficients[2,4], summary(model3.std)$coefficients[2,4], summary(model4.std)$coefficients[2,4], summary(model5.std)$coefficients[2,4], summary(model6.std)$coefficients[2,4], summary(model7.std)$coefficients[2,4]))
+
+table3 <- table3 %>% 
+          arrange(abs(p_value))
+table3
+```
+
+15) Based on our observations from table 1, table 2 and table 3; it can be establishd that *speed_ground*, *speed_air*, *airplane_make* and *height* are the most significant factors. Table 0 is created ranking each variable as per its sigficance to predict landing distance.
+```{r}
+table0 <- data.frame(rank = c(1,2,3,4,5,6,7), variables = c("speed_ground", "speed_air", "airplane_make", "height", "pitch", "duration", "no_pasg"))
+table0
+```
+
+
+16) On comparing the 2 models, it can be seen that the adjusted r squared for only *speed_air* is higher. Also, in the combined model *model.sga*, the p-value of *speed_ground* shows it to be insignificant and also the adjusted r squared is almost same as in *model.sa*. This can be due to extremely high correlation(0.987) between the 2 predictors. Therefore, the landing distance can be predicted with only *speed_air*, since it explains the data better than *speed_ground*.
+```{r}
+model.sg <- lm(distance ~ speed_ground, faa_clean)
+model.sa <- lm(distance ~ speed_air, faa_clean)
+model.sga <- lm(distance ~ speed_ground + speed_air, faa_clean)
+summary(model.sg)
+summary(model.sa)
+summary(model.sga)
+cor(faa_clean$speed_air, faa_clean$speed_ground, use = "complete.obs")
+```
+
+17) As per the previous step, we can explain the variation in landing distance with only *speed_air*. Therefore, we start building the model starting directly with *speed_air* from table 0. There seems to be an increase of r sqaured value with increase in predictors till 3, post that the variables don't seem to have significant effect.
+```{r}
+fmodel1 <- lm(distance ~ speed_air, faa_clean)
+fmodel2 <- lm(distance ~ speed_air + airplane_make, faa_clean)
+fmodel3 <- lm(distance ~ speed_air + airplane_make + height, faa_clean)
+fmodel4 <- lm(distance ~ speed_air + airplane_make + height + pitch, faa_clean)
+fmodel5 <- lm(distance ~ speed_air + airplane_make + height + pitch + duration, faa_clean)
+fmodel6 <- lm(distance ~ speed_air + airplane_make + height + pitch + duration + no_pasg, faa_clean)
+
+r_squared <- data.frame(r.squared = c(summary(fmodel1)$r.squared, summary(fmodel2)$r.squared, summary(fmodel3)$r.squared, summary(fmodel4)$r.squared, summary(fmodel5)$r.squared, summary(fmodel6)$r.squared), parameters = c(1,2,3,4,5,6))
+
+plot(r_squared$parameters, r_squared$r.squared, xlab = "Predictors", ylab = "R squared")
+```
+
+18) The adjusted r squared shows a similar trend like r squared, however there's a slight decrease in its value after adding the 4th predictor variable. Therefore, it can be concluded that the model response variable is best explained with 3 predictor variables.
+```{r}
+adj_r_squared <- data.frame(adj.r.squared = c(summary(fmodel1)$adj.r.squared, summary(fmodel2)$adj.r.squared, summary(fmodel3)$adj.r.squared, summary(fmodel4)$adj.r.squared, summary(fmodel5)$adj.r.squared, summary(fmodel6)$adj.r.squared), parameters = c(1,2,3,4,5,6))
+
+plot(adj_r_squared$parameters, adj_r_squared$adj.r.squared, xlab = "Predictors", ylab = "Adjusted r squared")
+```
+
+19) The AIC plot shows values ranging around 2500-2900. The values fall significantly till 3 predictors are added to the model. Post that, there doesn't seem to be much of an effect on the model. Hence, the first 3 predictors should be sufficient to predict the response variable. 
+```{r}
+fmodel1_aic <- AIC(lm(distance ~ speed_air, faa_clean))
+fmodel2_aic <- AIC(lm(distance ~ speed_air + airplane_make, faa_clean))
+fmodel3_aic <- AIC(lm(distance ~ speed_air + airplane_make + height, faa_clean))
+fmodel4_aic <- AIC(lm(distance ~ speed_air + airplane_make + height + pitch, faa_clean))
+fmodel5_aic <- AIC(lm(distance ~ speed_air + airplane_make + height + pitch + duration, faa_clean))
+fmodel6_aic <- AIC(lm(distance ~ speed_air + airplane_make + height + pitch + duration + no_pasg, faa_clean))
+
+model_aic <- data.frame(AIC = c(fmodel1_aic, fmodel2_aic, fmodel3_aic, fmodel4_aic, fmodel5_aic, fmodel6_aic), parameters = c(1,2,3,4,5,6))
+
+plot(model_aic$parameters, model_aic$AIC, xlab = "Predictors", ylab = "AIC")
+```
+
+20) On comparing results using both adjusted r squared and AIC values, we observe similar results. The 3 variables *speed_air*, *airplane_make* and *height* should be used as predictors as they best explain the variance in landing distance.
+
+21) The stepAIC forward selection method shows all the variables to have some effect in landing distance. However, the backward selection method results are similar to what we observed in above methods with addition of *no_pasg* having some effect. However, this effect is of not logical significance based on the coefficient value. We can conclude that the 3 variables mentioned in steo 20 are best to predict landing distance.
+```{r}
+stepAIC(fmodel6, direction = "forward")
+faa_clean_bw <- filter(faa_clean, !is.na(duration), !is.na(speed_air))
+fmodel6_bw <- lm(distance ~ speed_air + airplane_make + height + pitch + duration + no_pasg, faa_clean_bw)
+stepAIC(fmodel6_bw, direction = "backward")
+```
+

@@ -1,0 +1,149 @@
+---
+title: "ProjectPart3_HalderSoumya"
+author: "Soumya Halder"
+date: "3/1/2020"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+All the required packages are load at the beginning.
+
+```{r include=FALSE, warning=FALSE, message=FALSE}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(MASS)
+library(VGAM)
+library(nnet)
+```
+
+
+* We create a multinomial variable *Y* using distance variable with the following definition:
+Y = 1 if distance < 1000
+Y = 2 if 1000 < = distance < 2500
+Y = 3 otherwise
+Now, we won't use the distance variable further and assume that the order for variable Y is unknown.
+
+```{r}
+faa_clean <- read.csv("D:/MS BANA/Spring 20/Stat Modelling 7042/Week 2/faa_clean.csv")
+faa_clean$airplane_make <- as.factor(faa_clean$airplane_make)
+faa_clean <- faa_clean %>%
+                  mutate(Y = case_when(
+                              distance < 1000 ~ 1,
+                              distance >= 1000 & distance < 2500 ~ 2,
+                              TRUE ~ 3
+                  ))
+head(faa_clean)
+str(faa_clean)
+faa_clean$Y <- as.factor(faa_clean$Y)
+faa_clean$Y1 <- as.numeric(faa_clean$Y)
+summary(faa_clean)
+```
+
+
+* A histogram is plotted to check the distribution of variable Y.Most occurences are of Y=2 followed by 1 and then 3.
+
+```{r}
+faa_clean %>% ggplot(aes(x = Y1)) +
+                    geom_histogram(binwidth = 0.5) +
+                    scale_x_continuous(breaks = seq(1, 3, 1)) +
+                    xlab("Y")
+```
+
+
+* Data preparation: It is observed while removing all rows containing NA values, all occurences of *Y=1* also get removed. In our previous observations, we conculded that *speed_ground* and *speed_air* are highly correlated with the latter providing better results on the response variable. Since, the data gets highly affected here, we will use *speed_ground* to maintain better data quality.
+
+```{r}
+faa_clean_na_rm <- na.omit(faa_clean)
+summary(faa_clean_na_rm)
+```
+
+
+* A new dataframe with only the predictor variables are created and then treated for the NA values present in duration column.
+
+```{r}
+faa_clean_na <- faa_clean[, c("duration", "no_pasg", "speed_ground", "height", "pitch", "airplane_make", "Y")]
+faa_clean_na <- na.omit(faa_clean_na)
+summary(faa_clean_na)
+```
+
+* Model builiding: We fit a multinomial model with Y as response and all other variables as predictors. The coefficients and their std errors can be noted in the below result. Here, *Y=1* has been used as a reference category. Hence, if *speed_ground* increases by 1 unit, the probability of Y=1 goes down by exp(0.244) i.e. 0.27% and a corresponding increasing in Y=2. 
+```{r}
+mmod <- multinom(Y ~ ., data = faa_clean_na)
+summary(mmod)
+```
+
+* Let's fit a model using stepwise AIC method. We obtain only 4 predictor variables to be significant. Next, we'll calculate if these 2 models have high variances among them by performing a chi-squared test.
+```{r}
+mmod.aic <- step(mmod, trace = 0)
+summary(mmod.aic)
+```
+
+* Difference between deviances of the 2 models
+```{r}
+deviance(mmod.aic) - deviance(mmod)
+```
+
+* Differnce between degrees of freedom
+```{r}
+mmod.aic$edf
+mmod$edf
+mmod$edf - mmod.aic$edf
+```
+
+
+* The chi-squared test doesn't allow us to reject the null hypothesis that both models are same. Since the AIC model is simpler with fewer predictors, we'll choose it for future predictions.
+
+```{r}
+pchisq(deviance(mmod.aic) - deviance(mmod), mmod$edf - mmod.aic$edf, lower = F)
+```
+
+
+* The below table shows the actual and predicted classes for all sets of predictor values. It can be seen, that very few data points are misclassified.
+
+```{r}
+xtabs(~faa_clean_na$Y + predict(mmod.aic))
+```
+
+
+* We'll visualize the results with all predictor variables strating with *speed_ground*
+```{r}
+
+faa_clean_pred <- faa_clean_na[, c("speed_ground", "height", "pitch", "airplane_make", "Y")]
+faa_clean_pred$predclass <- predict(mmod.aic, newdata = faa_clean_pred, type = "class")
+
+faa_clean_pred %>% 
+  ggplot(aes(x = speed_ground, y = predclass)) +
+  geom_point()
+```
+
+There is slight difference between the above and below graph which plots the predictor with actual Y values.
+```{r}
+faa_clean_pred %>% 
+  ggplot(aes(x = speed_ground, y = Y)) +
+  geom_point()
+```
+
+
+* The below 2 graphs with *height* and *pitch* doesn't give a clear indication of what could be the predicted Y value.
+
+```{r}
+faa_clean_pred %>% 
+  ggplot(aes(x = height, y = predclass)) +
+  geom_point()
+
+faa_clean_pred %>% 
+  ggplot(aes(x = pitch, y = predclass)) +
+  geom_point()
+```
+
+* In conclusion, below are the coefficients of interest which reflects the change in response for any change in predictor variables
+```{r echo=FALSE, include=FALSE}
+summary(mmod.aic)$coefficients
+```
+* *speed_ground* seems to be the most important factor in classifying classes
+* With *speed_ground* higher than 100, Y gets classified as 3 which can hint at possible risky landing for the aircraft
+* This is further confirmed with the high coefficient values of *speed_ground* in comparison with other variables

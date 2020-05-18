@@ -1,0 +1,443 @@
+---
+title: "Project_Part2_SoumyaHalder"
+author: "Soumya Halder"
+date: "2/8/2020"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r echo=FALSE, include=FALSE, warning=FALSE, message=FALSE}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(MASS)
+library(PRROC)
+library(pROC)
+library(faraway)
+```
+
+
+1) We create 2 variables *long.landing* and *risky.landing* using *distance*. The former has a threshold of 2500 while the latter is of 3000. Post threshold, the landing won't be safe for the flight.
+```{r}
+faa_clean <- read.csv("D:/MS BANA/Spring 20/Stat Modelling 7042/Week 2/faa_clean.csv")
+faa_clean$airplane_make <- as.factor(faa_clean$airplane_make)
+faa_clean <- faa_clean %>%
+                  mutate(long.landing = ifelse(distance > 2500, 1, 0),
+                         risky.landing = ifelse(distance > 3000, 1, 0))
+```
+
+2) A histogram is plotted for analysis of *long.landing* variable. The amount of 0s outweigh the number of 1s by a huge margin.
+```{r warning=F, message=F}
+faa_clean %>% ggplot(aes(x = long.landing)) +
+                    geom_histogram(binwidth = 0.5) +
+                    scale_x_continuous(breaks = seq(0, 1, 1))
+```
+
+3) Building model for *long.landing*
+a) We build multiple generalized linear models with *long.landing* as the response variable and every other variable as predictor each time. Table 1 is made in ascending order of the p-value obtained. *speed_ground*, *speed_air*, *airplane_make* and *pitch* seems to be the most important factor in predicting whether the landing will be safe or not. All other variables have p-values greater than 0.05.
+```{r warning=F, message=F}
+model.ld1 <- glm(long.landing ~ duration, family = binomial, faa_clean)
+model.ld2 <- glm(long.landing ~ no_pasg, family = binomial, faa_clean)
+model.ld3 <- glm(long.landing ~ speed_ground, family = binomial, faa_clean)
+model.ld4 <- glm(long.landing ~ speed_air, family = binomial, faa_clean)
+model.ld5 <- glm(long.landing ~ height, family = binomial, faa_clean)
+model.ld6 <- glm(long.landing ~ pitch, family = binomial, faa_clean)
+model.ld7 <- glm(long.landing ~ airplane_make, family = binomial, faa_clean)
+
+table1 <- data.frame(variables = c("duration", "no_pasg", "speed_ground", "speed_air", "height", "pitch", "airplane_make"),coefficients = c(summary(model.ld1)$coefficients[2,1], summary(model.ld2)$coefficients[2,1], summary(model.ld3)$coefficients[2,1], summary(model.ld4)$coefficients[2,1], summary(model.ld5)$coefficients[2,1], summary(model.ld6)$coefficients[2,1], summary(model.ld7)$coefficients[2,1]),
+                     p_value = c(summary(model.ld1)$coefficients[2,4], summary(model.ld2)$coefficients[2,4], summary(model.ld3)$coefficients[2,4], summary(model.ld4)$coefficients[2,4], summary(model.ld5)$coefficients[2,4], summary(model.ld6)$coefficients[2,4], summary(model.ld7)$coefficients[2,4]))
+
+table1 <- table1 %>% 
+              mutate(odds_ratio = exp(coefficients),
+                     direction = ifelse(coefficients > 0, "Positive", "Negative")) %>% 
+              arrange(p_value)
+table1
+```
+
+b) Every predictor variable is standardized by X’= {X-mean(X)}/sd(X). The models obtained in previous step are rerun and table 2 is created based on p-value. A similar level of importance in predictors can be observed as seen in table 1.
+
+```{r warning=F, message=F}
+faa_std <- faa_clean %>% 
+            transmute(distance = distance * 1,
+                      duration = (duration - mean(duration, na.rm = T))/sd(duration, na.rm = T),
+                      no_pasg = (no_pasg - mean(no_pasg, na.rm = T))/sd(no_pasg, na.rm = T),
+                      speed_ground = (speed_ground - mean(speed_ground, na.rm = T))/sd(speed_ground, na.rm = T),
+                      speed_air = (speed_air - mean(speed_air, na.rm = T))/sd(speed_air, na.rm = T),
+                      height = (height - mean(height, na.rm = T))/sd(height, na.rm = T),
+                      pitch = (pitch - mean(pitch, na.rm = T))/sd(pitch, na.rm = T),
+                      airplane_make = airplane_make)
+```
+
+```{r warning=F, message=F}
+faa_std <- faa_std %>%
+                  mutate(long.landing = ifelse(distance > 2500, 1, 0),
+                         risky.landing = ifelse(distance > 3000, 1, 0))
+
+model.ld.std1 <- glm(long.landing ~ duration, family = binomial, faa_std)
+model.ld.std2 <- glm(long.landing ~ no_pasg, family = binomial, faa_std)
+model.ld.std3 <- glm(long.landing ~ speed_ground, family = binomial, faa_std)
+model.ld.std4 <- glm(long.landing ~ speed_air, family = binomial, faa_std)
+model.ld.std5 <- glm(long.landing ~ height, family = binomial, faa_std)
+model.ld.std6 <- glm(long.landing ~ pitch, family = binomial, faa_std)
+model.ld.std7 <- glm(long.landing ~ airplane_make, family = binomial, faa_std)
+
+table2 <- data.frame(variables = c("duration", "no_pasg", "speed_ground", "speed_air", "height", "pitch", "airplane_make"),coefficients = c(summary(model.ld.std1)$coefficients[2,1], summary(model.ld.std2)$coefficients[2,1], summary(model.ld.std3)$coefficients[2,1], summary(model.ld.std4)$coefficients[2,1], summary(model.ld.std5)$coefficients[2,1], summary(model.ld.std6)$coefficients[2,1], summary(model.ld.std7)$coefficients[2,1]),
+                     p_value = c(summary(model.ld.std1)$coefficients[2,4], summary(model.ld.std2)$coefficients[2,4], summary(model.ld.std3)$coefficients[2,4], summary(model.ld.std4)$coefficients[2,4], summary(model.ld.std5)$coefficients[2,4], summary(model.ld.std6)$coefficients[2,4], summary(model.ld.std7)$coefficients[2,4]))
+
+table2 <- table2 %>% 
+              mutate(odds_ratio = exp(coefficients),
+                     direction = ifelse(coefficients > 0, "Positive", "Negative")) %>% 
+              arrange(p_value)
+table2
+```
+
+c) Table 3 is created in decreasing order of importance. It can be oberserved that *speed_ground*, *speed_air*, *airplane_make* and *pitch* are the variables our model should be built on. 
+```{r warning=F, message=F}
+table3 <- data.frame(rank = c(1,2,3,4), variables = table1$variables[c(1:4)])
+table3
+```
+
+4) We plot association of variables obtained in previous step with the response variable. The plots for both *speed_ground* and *speed_air* show a clear trend of increasing landing risks with an increase in speeds. However, the plot for *pitch* show a scattered distribution.
+```{r warning=F, message=F}
+par(mfrow = c(1,4))
+
+plot(jitter(long.landing, 0.1) ~ jitter(speed_ground), faa_clean, pch = ".",
+     xlab = "Speed Ground", ylab = "long landing")
+plot(jitter(long.landing, 0.1) ~ jitter(speed_air), faa_clean, pch = ".",
+     xlab = "Speed Air", ylab = "long landing")
+plot(jitter(long.landing, 0.1) ~ jitter(pitch), faa_clean, pch = ".",
+     xlab = "Pitch", ylab = "long landing")
+plot(faa_clean$airplane_make, faa_clean$risky.landing)
+```
+
+5) The correlation between speed_air and speed_ground is very high. We learned that the model provides better results with only *speed_air* as predictor. Therefore, while building a full model only speed_air will be used along with variables in table 3. The model *fm.ll* statistics show the *pitch* variable to be highly insignificant. Therefore, it should be removed from our final model.
+```{r warning=F, message=F}
+cor(faa_clean$speed_air, faa_clean$speed_ground, use = "complete.obs")
+fm.ll <- glm(long.landing ~ speed_air + airplane_make + pitch, family = binomial,
+                    faa_clean)
+colSums(is.na(faa_clean))
+summary(fm.ll)
+
+```
+
+6) The model is built using stepAIC forward direction to predict the response variable *long.landing*. The final model formed here provides similar results to our previous model. As observed, the p-value for *pitch* is highly insignificant. Therefore, our model becomes similar with an addition of *height* variable. Let's build the model again using stepBIC.
+```{r warning=F, message=F}
+faa_clean_nad <- na.omit(faa_clean)
+
+nmodel <- glm(long.landing ~ 1, family = binomial, faa_clean_nad)
+fmodel <- glm(long.landing ~ .-distance -aircraft -risky.landing, family = binomial,
+              faa_clean_nad)
+
+step.f.aic <- step(nmodel,
+                   scope = list(lower = nmodel, upper = fmodel),
+                   direction = "forward")
+summary(step.f.aic)
+```
+
+7) The results using stepBIC are exactly similar to stepAIC and an addition of *height* variable when compared to the one built with EDA.
+```{r warning=F, message=F}
+step.f.bic <- step(nmodel,
+                   scope = list(lower = nmodel, upper = fmodel),
+                   direction = "forward",
+                   k = log(nrow(faa_clean_nad)))
+
+summary(step.f.bic)
+```
+
+8) After going through the 3 models above, it can be said that the best model built is with *speed_air*, *airplane_make* and *height* as predictors. Since, BIC model is more parsimonious in its building methodology. This model is stored in *ste.f.bic*. This can be observed by the matrix created, which shows very high TPR and TNR.
+Below are some of the key takeaways:
+* Our model does an excellent work of predicting on the data itself
+* All three variables have positive coefficients i.e. they all increase the chances of long landing with any increase observed in itself
+* The odds ratio for *speed_air* is 3.886 and for *height* it is 1.389 for every unit increase in these variables
+* This relation can be further seen in the jitter plots
+
+```{r warning=F, message=F}
+fm.ll.pred <- predict(step.f.bic) ### Linear predictor
+fm.ll.predprob <- predict(step.f.bic, type = "response") ### predicted probabilities
+fm.ll.predout <- ifelse(fm.ll.predprob < 0.5, 0, 1) ### Predicted outcomes using 0.5 as the threshold
+
+faa_clean_na <- filter(faa_clean, !is.na(faa_clean$speed_air))
+faa_pred <- data.frame(actual = faa_clean_nad$long.landing, predprob = fm.ll.predprob,
+                       predout = fm.ll.predout)
+summary(step.f.bic)
+xtabs(~ actual + predout, faa_pred)
+
+```
+
+```{r warning=F, message=F}
+par(mfrow = c(1,2))
+plot(jitter(long.landing, 0.1) ~ jitter(speed_air), faa_clean, pch = ".",
+     xlab = "Speed Air", ylab = "long landing")
+plot(jitter(long.landing, 0.1) ~ jitter(height), faa_clean, pch = ".",
+     xlab = "Height", ylab = "long landing")
+```
+
+9) We follow the above steps for *risky.landing* as the response variable.
+a) Histogram for *risky.landing*. This is similar to histogram of *long.landing*, however the number of 0s are more and 1s are less in number.
+```{r warning=F, message=F}
+faa_clean %>% ggplot(aes(x = risky.landing)) +
+                    geom_histogram(binwidth = 0.5) +
+                    scale_x_continuous(breaks = seq(0, 1, 1))
+```
+
+b) We build multiple generalized linear models with *risky.landing* as the response variable and every other variable as predictor each time. Tabler1 is made in ascending order of the p-value obtained. *speed_ground*, *speed_air* and *airplane_make* seem to be the most important metrics in predicting whether the landing will be safe or not. All other variables have p-values greater than 0.05.
+```{r warning=F, message=F}
+model.rd1 <- glm(risky.landing ~ duration, family = binomial, faa_clean)
+model.rd2 <- glm(risky.landing ~ no_pasg, family = binomial, faa_clean)
+model.rd3 <- glm(risky.landing ~ speed_ground, family = binomial, faa_clean)
+model.rd4 <- glm(risky.landing ~ speed_air, family = binomial, faa_clean)
+model.rd5 <- glm(risky.landing ~ height, family = binomial, faa_clean)
+model.rd6 <- glm(risky.landing ~ pitch, family = binomial, faa_clean)
+model.rd7 <- glm(risky.landing ~ airplane_make, family = binomial, faa_clean)
+
+tabler1 <- data.frame(variables = c("duration", "no_pasg", "speed_ground", "speed_air", "height", "pitch", "airplane_make"),coefficients = c(summary(model.rd1)$coefficients[2,1], summary(model.rd2)$coefficients[2,1], summary(model.rd3)$coefficients[2,1], summary(model.rd4)$coefficients[2,1], summary(model.rd5)$coefficients[2,1], summary(model.rd6)$coefficients[2,1], summary(model.rd7)$coefficients[2,1]),
+                     p_value = c(summary(model.rd1)$coefficients[2,4], summary(model.rd2)$coefficients[2,4], summary(model.rd3)$coefficients[2,4], summary(model.rd4)$coefficients[2,4], summary(model.rd5)$coefficients[2,4], summary(model.rd6)$coefficients[2,4], summary(model.rd7)$coefficients[2,4]))
+
+tabler1 <- tabler1 %>% 
+              mutate(odds_ratio = exp(coefficients),
+                     direction = ifelse(coefficients > 0, "Positive", "Negative")) %>% 
+              arrange(p_value)
+tabler1
+```
+
+c) Every predictor variable is standardized by X’= {X-mean(X)}/sd(X). The models obtained in previous step are rerun and tabler2 is created based on p-value. A similar level of importance in predictors can be observed as seen in tabler1.
+```{r warning=F, message=F}
+model.rd.std1 <- glm(risky.landing ~ duration, family = binomial, faa_std)
+model.rd.std2 <- glm(risky.landing ~ no_pasg, family = binomial, faa_std)
+model.rd.std3 <- glm(risky.landing ~ speed_ground, family = binomial, faa_std)
+model.rd.std4 <- glm(risky.landing ~ speed_air, family = binomial, faa_std)
+model.rd.std5 <- glm(risky.landing ~ height, family = binomial, faa_std)
+model.rd.std6 <- glm(risky.landing ~ pitch, family = binomial, faa_std)
+model.rd.std7 <- glm(risky.landing ~ airplane_make, family = binomial, faa_std)
+
+tabler2 <- data.frame(variables = c("duration", "no_pasg", "speed_ground", "speed_air", "height", "pitch", "airplane_make"),coefficients = c(summary(model.rd.std1)$coefficients[2,1], summary(model.rd.std2)$coefficients[2,1], summary(model.rd.std3)$coefficients[2,1], summary(model.rd.std4)$coefficients[2,1], summary(model.rd.std5)$coefficients[2,1], summary(model.rd.std6)$coefficients[2,1], summary(model.rd.std7)$coefficients[2,1]),
+                     p_value = c(summary(model.rd.std1)$coefficients[2,4], summary(model.rd.std2)$coefficients[2,4], summary(model.rd.std3)$coefficients[2,4], summary(model.rd.std4)$coefficients[2,4], summary(model.rd.std5)$coefficients[2,4], summary(model.rd.std6)$coefficients[2,4], summary(model.rd.std7)$coefficients[2,4]))
+
+tabler2 <- tabler2 %>% 
+              mutate(odds_ratio = exp(coefficients),
+                     direction = ifelse(coefficients > 0, "Positive", "Negative")) %>% 
+              arrange(p_value)
+tabler2
+```
+
+d) Tabler3 is created in decreasing order of importance. It can be oberserved that *speed_ground*, *speed_air* and *airplane_make* are the variables our model should be built on. 
+```{r warning=F, message=F}
+tabler3 <- data.frame(rank = c(1,2,3), variables = tabler1$variables[c(1:3)])
+tabler3
+```
+
+e) Similar results are observed in observing association of significant variables with *risky.landing*. After a certain speed in both predictors, the landing risk gets very high.
+```{r warning=F, message=F}
+par(mfrow = c(1,3))
+
+plot(jitter(risky.landing, 0.1) ~ jitter(speed_ground), faa_clean, pch = ".",
+     xlab = "Speed Ground", ylab = "risky landing")
+plot(jitter(risky.landing, 0.1) ~ jitter(speed_air), faa_clean, pch = ".",
+     xlab = "Speed Air", ylab = "risky landing")
+plot(faa_clean$airplane_make, faa_clean$risky.landing)
+```
+
+f) Just like the model built for *long.landing*, we build a full model for *risky.landing* with only speed_air along with *airplane_make* in tabler3.
+```{r warning=F, message=F}
+fm.rl <- glm(risky.landing ~ speed_air + airplane_make, family = binomial,
+                    faa_clean)
+
+summary(fm.rl)
+```
+
+g) We rebuild the model using stepAIC forward direction method. The results are in line with the above EDA based model.
+```{r warning=F, message=F}
+nmodel_r <- glm(risky.landing ~ 1, family = binomial, faa_clean_nad)
+fmodel_r <- glm(risky.landing ~ .-distance -aircraft -long.landing, family = binomial,
+              faa_clean_nad)
+
+step.f.aic_r <- step(nmodel_r,
+                   scope = list(lower = nmodel_r, upper = fmodel_r),
+                   direction = "forward")
+summary(step.f.aic_r)
+```
+
+h) In this step, while building the model with stepBIC, we observe that all 3 models are similar to each other. Therefore, this is our best model.
+```{r warning=F, message=F}
+step.f.bic_r <- step(nmodel_r,
+                   scope = list(lower = nmodel_r, upper = fmodel_r),
+                   direction = "forward",
+                   k = log(nrow(faa_clean_nad)))
+
+summary(step.f.bic_r)
+```
+
+10) All the 3 models built for risky landing provide the same output. Therefore, the final model is built with *speed_air* and *airplane_make* as predictor variables. Below are some of the key takeaways:
+* The model does an excellent job on evaluating its performance on the data
+* Both predictor coefficients have positive coefficients i.e. the risk for landing increases for any increase in the variable
+* The odds ratio for *speed_air* is 3.389 for every unit increase in the variable
+* The odds ratio here is less compared to long landing model, since the risks are already very high in this case
+* This relation can be observed in the jitter plot
+```{r warning=F, message=F}
+fm.rl.pred <- predict(step.f.bic_r) ### Linear predictor
+fm.rl.predprob <- predict(step.f.bic_r, type = "response") ### predicted probabilities
+fm.rl.predout <- ifelse(fm.rl.predprob < 0.5, 0, 1) ### Predicted outcomes using 0.5 as the threshold
+
+faa_pred_2 <- data.frame(actual = faa_clean_nad$risky.landing, predprob = fm.rl.predprob,
+                       predout = fm.rl.predout)
+
+summary(step.f.bic_r)
+xtabs(~ actual + predout, faa_pred_2)
+```
+
+```{r warning=F, message=F}
+plot(jitter(risky.landing, 0.1) ~ jitter(speed_air), faa_clean, pch = ".",
+     xlab = "Speed Air", ylab = "risky landing")
+```
+
+11) Let's see the differences in model built for *long.landing*(LL) and *risky.landing*(RL)
+* LL has an extra predictor variable *height* than RL
+* The beta coefficients for predictors are high in LL model than RL
+* This explains that the risks increase more in LL with any increase in *speed_air* or *height* variable, while the risks are already high for RL model and doesn't increase at the same level as LL
+
+12) The ROC for both *long.landing*(LL) and *risky.landing*(RL) are very close to 1 and both curves have high overlapping. This can be further understood by the fact that the AUC for both are extremely close to 1. This may be due to presence of high NAs in *speed_air* which get removed in stepwise regression methods.
+```{r warning=F, message=F}
+roc.ll <- roc(faa_clean_nad$long.landing, fm.ll.predprob, legacy.axes = T)
+roc.rl <- roc(faa_clean_nad$risky.landing, fm.rl.predprob, legacy.axes = T)
+
+paste("ROC for long landing model", round(roc.ll$auc,3))
+paste("ROC for risky landing model", round(roc.rl$auc,3))
+
+plot(roc.ll)
+plot(roc.rl, col = "blue", add = TRUE)
+```
+
+13) With *speed_air = 120* and *height = 40*, we predict the probability of both landings.We observe interesting results here since both the probabilities are almost 1. The CI in all cases are extremely narrow and very close to 1. A possible reason for this might be the high value of *speed_air*. In the information provided, the value is very close to the higher level(140). If it is greater than 140, then the landing is considered to be abnormal. However, our models convey that even if the speed is slightly lower than 140, the landing can still carry high potential risks.
+```{r warning=F, message=F, results="hide"}
+predict(step.f.bic, newdata = data.frame(speed_air = 120, airplane_make = "0",height = 40),
+        type = "link",
+        se.fit = T)
+
+predict(step.f.bic_r, newdata = data.frame(speed_air = 120, airplane_make = "0"),
+        type = "link",
+        se.fit = T)
+```
+
+a) Confidence interval if the flight is Airbus
+```{r warning=F, message=F}
+paste("CI for Airbus with height 40 and speed_air 120 in long landing is between", ilogit(25.3999 - 1.96*6.383), "and", ilogit(25.3999 + 1.96*6.383))
+
+paste("CI for Airbus and speed_air 120 in risky landing is between", ilogit(12.756 - 1.96*3.354), "and", ilogit(12.756 + 1.96*3.354))
+```
+
+```{r warning=F, message=F, results="hide"}
+predict(step.f.bic, newdata = data.frame(speed_air = 120, airplane_make = "1",height = 40),
+        type = "link",
+        se.fit = T)
+
+predict(step.f.bic_r, newdata = data.frame(speed_air = 120, airplane_make = "1",height = 40),
+        type = "link",
+        se.fit = T)
+
+ilogit(c(32.8229 - 1.96*8.158, 32.8229 + 1.96*8.158))
+ilogit(c(17.306 - 1.96*4.423, 17.306 + 1.96*4.423))
+
+```
+
+b) Confidence interval if the flight is Boeing
+```{r warning=F, message=F}
+paste("CI for Boeing with height 40 and speed_air 120 in long landing is between", ilogit(32.8229 - 1.96*8.158), "and", ilogit(32.8229 + 1.96*8.158))
+
+paste("CI for Boeing and speed_air 120 in risky landing is between", ilogit(17.306 - 1.96*4.423), "and", ilogit(17.306 + 1.96*4.423))
+
+```
+
+
+14) We build the models with 2 different link functions: *probit* and *cloglog*
+```{r warning=F, message=F}
+step.f.bic_r_p <- glm(risky.landing ~ speed_air + airplane_make,
+                      family = binomial(link = "probit"),
+                      faa_clean_nad)
+summary(step.f.bic_r_p)
+fm.rl.predprob.p <- predict(step.f.bic_r_p, type = "response") ### predicted probabilities
+
+step.f.bic_r_h <- glm(risky.landing ~ speed_air + airplane_make,
+                      family = binomial(link = "cloglog"),
+                      faa_clean_nad)
+summary(step.f.bic_r_h)
+fm.rl.predprob.h <- predict(step.f.bic_r_h, type = "response") ### predicted probabilities
+```
+
+On comparing coefficients of above 2 models with logit link function, it is seen that they are quite low as compared to logit.
+```{r warning=F, message=F}
+round(coef(step.f.bic_r),3)
+round(coef(step.f.bic_r_p),3)
+round(coef(step.f.bic_r_h),3)
+
+```
+
+15) After plotting all 3 ROC curves together, we don't see a huge difference among the curves. Thia is also true about the AUC value for all models.
+```{r warning=F, message=F}
+predprob.p <- predict(step.f.bic_r_p, type = "response") ### predicted probabilities
+predprob.h <- predict(step.f.bic_r_h, type = "response") ### predicted probabilities
+
+roc.rl.p <- roc(faa_clean_nad$risky.landing, predprob.p, legacy.axes = T)
+roc.rl.h <- roc(faa_clean_nad$risky.landing, predprob.h, legacy.axes = T)
+
+paste("ROC for probit risky landing model", round(roc.rl.p$auc,3))
+paste("ROC for cloglog risky landing model", round(roc.rl.h$auc,3))
+
+plot(roc.rl)
+plot(roc.rl.p, col = "red", add = TRUE)
+plot(roc.rl.h, col = "blue", add = TRUE)
+
+```
+
+
+16) Now, we found out the top 5 high risk flights for *risky.landing* based on our models with 3 link functions. The results for probit and cloglog are similar, while they are completely different for logit.
+```{r}
+pred.rl.logit.index <- names(head(sort(fm.rl.predprob, decreasing = T), 5))
+pred.rl.probit.index <- names(head(sort(fm.rl.predprob.p, decreasing = T), 5))
+pred.rl.cloglog.index <- names(head(sort(fm.rl.predprob.h, decreasing = T), 5))
+
+top5.rl <- data.frame(logit = pred.rl.logit.index,
+                      probit = pred.rl.probit.index,
+                      cloglog = pred.rl.cloglog.index)
+top5.rl
+```
+
+
+17) The results observed here doesn't have much significant variance then the ones predicted using logit function. The probability and the CI are very close to 1 indicating high chances of risky landing.
+a) CI using probit model
+```{r warning=F, message=F, results="hide"}
+predict(step.f.bic_r_p, newdata = data.frame(speed_air = 120, airplane_make = "0"),
+        type = "link",
+        se.fit = T)
+
+predict(step.f.bic_r_p, newdata = data.frame(speed_air = 120, airplane_make = "1"),
+        type = "link",
+        se.fit = T)
+```
+
+```{r}
+paste("CI for Airbus and speed_air 120 in risky landing is between", ilogit(7.049 - 1.96*1.701), "and", ilogit(7.049 + 1.96*1.701))
+
+paste("CI for Boeing and speed_air 120 in risky landing is between", ilogit(9.691 - 1.96*2.241), "and", ilogit(9.691 + 1.96*2.241))
+
+```
+
+
+b) CI using cloglog model
+```{r warning=F, message=F, results="hide"}
+predict(step.f.bic_r_h, newdata = data.frame(speed_air = 120, airplane_make = "0"),
+        type = "link",
+        se.fit = T)
+
+predict(step.f.bic_r_h, newdata = data.frame(speed_air = 120, airplane_make = "1",height = 40),
+        type = "link",
+        se.fit = T)
+```
+
+```{r warning=F, message=F}
+paste("CI for Airbus and speed_air 120 in risky landing is between", ilogit(9.357 - 1.96*2.483), "and", ilogit(9.357 + 1.96*2.483))
+
+paste("CI for Boeing and speed_air 120 in risky landing is between", ilogit(12.6 - 1.96*3.165), "and", ilogit(12.6 + 1.96*3.165))
+```
+
