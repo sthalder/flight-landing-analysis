@@ -3,8 +3,9 @@ title: "Project1_SH"
 author: "Soumya Halder"
 date: "1/21/2020"
 output:
-  word_document: default
   html_document: default
+  word_document: default
+  keep_md: true
 ---
 ```{r echo=FALSE, warning=FALSE, message=FALSE}
 library(readxl)

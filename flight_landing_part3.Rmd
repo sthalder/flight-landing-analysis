@@ -6,6 +6,7 @@ output:
   word_document: default
   html_document:
     df_print: paged
+    keep_md: true
 ---
 
 All the required packages are load at the beginning.

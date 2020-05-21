@@ -5,6 +5,7 @@ date: "2/8/2020"
 output:
   word_document: default
   html_document: default
+  keep_md: true
 ---
 
 ```{r echo=FALSE, include=FALSE, warning=FALSE, message=FALSE}
