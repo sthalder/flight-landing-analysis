@@ -3,9 +3,8 @@ title: "Project_Part2_SoumyaHalder"
 author: "Soumya Halder"
 date: "2/8/2020"
 output:
-  word_document: default
-  html_document: default
-  keep_md: true
+  html_document:
+    df_print: paged
 ---
 
 ```{r echo=FALSE, include=FALSE, warning=FALSE, message=FALSE}
